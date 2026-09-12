@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krankmeldung</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        colors: {
+          ink: '#1B2430',
+          mute: '#66707E',
+          line: '#E3E7ED',
+          surface: '#FFFFFF',
+          canvas: '#F5F7FA',
+          brand: { DEFAULT: '#146B69', dark: '#0E4E4D', light: '#E3F0EF' },
+          warn: { DEFAULT: '#C4762A', light: '#FBEDE0' },
+          bad: '#B4432F'
+        },
+        borderRadius: { xl2: '1.1rem' }
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  ::selection { background: #C7E2E0; }
+  .focus-ring:focus-visible { outline: 2px solid #146B69; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+  .tab-btn[data-active="true"] {
+    color: #146B69;
+    border-color: #146B69;
+  }
+  input[type="checkbox"].subj-check {
+    accent-color: #146B69;
+  }
+</style>
+</head>
+<body class="bg-canvas text-ink min-h-screen">
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+
+  <!-- Kopfbereich -->
+  <header class="flex items-start justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-800 font-extrabold tracking-tight text-ink">Krankmeldung</h1>
+      <p id="todayLine" class="text-sm text-mute mt-1">–</p>
+    </div>
+    <div class="shrink-0 rounded-xl2 bg-brand-light text-brand-dark px-3 py-2 text-center leading-tight">
+      <div id="headerWeekday" class="text-sm font-semibold">–</div>
+      <div id="headerDate" class="text-xs">–</div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="flex gap-6 border-b border-line mb-6">
+    <button data-tab="melden" data-active="true" class="tab-btn pb-3 text-sm font-semibold text-mute border-b-2 border-transparent focus-ring">Krankmelden</button>
+    <button data-tab="settings" data-active="false" class="tab-btn pb-3 text-sm font-semibold text-mute border-b-2 border-transparent focus-ring">Einstellungen</button>
+  </nav>
+
+  <!-- ===================== TAB: KRANKMELDEN ===================== -->
+  <section id="panel-melden" class="space-y-5">
+
+    <!-- Offene Erinnerungen: schriftliche Entschuldigung nachreichen -->
+    <div id="reminderBox" class="space-y-2 hidden"></div>
+
+    <!-- Art der Meldung -->
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <h2 class="text-sm font-semibold text-mute mb-3">Art der Meldung</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label class="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input type="radio" name="meldeArt" value="krank" checked class="mt-0.5 accent-brand">
+          <span>
+            <span class="block text-sm font-medium text-ink">Krankmeldung</span>
+            <span class="block text-xs text-mute">Fällt heute ganz oder teilweise aus</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input type="radio" name="meldeArt" value="verspaetung" class="mt-0.5 accent-brand">
+          <span>
+            <span class="block text-sm font-medium text-ink">Verspätung</span>
+            <span class="block text-xs text-mute">Kommt heute später zum Unterricht</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Angaben zur Person -->
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <h2 class="text-sm font-semibold text-mute mb-3">Angaben</h2>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="stuName" class="block text-xs text-mute mb-1">Name</label>
+          <input id="stuName" type="text" placeholder="Vor- und Nachname"
+            class="w-full rounded-lg border border-line px-3 py-2 text-sm focus-ring">
+        </div>
+        <div>
+          <label for="stuKlasse" class="block text-xs text-mute mb-1">Klasse</label>
+          <input id="stuKlasse" type="text" placeholder="z. B. 9b"
+            class="w-full rounded-lg border border-line px-3 py-2 text-sm focus-ring">
+        </div>
+      </div>
+    </div>
+
+    <!-- Tageswahl + Fächerliste -->
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-3 gap-3">
+        <h2 class="text-sm font-semibold text-mute">Fächer</h2>
+        <select id="daySelect" class="rounded-lg border border-line px-2 py-1.5 text-sm focus-ring"></select>
+      </div>
+      <div id="weekendNote" class="hidden text-xs text-warn bg-warn-light rounded-lg px-3 py-2 mb-3"></div>
+      <div id="subjectList" class="space-y-2"></div>
+      <div id="noSubjects" class="hidden text-sm text-mute py-4 text-center">
+        Für diesen Tag sind noch keine Fächer hinterlegt. Trag sie unter „Einstellungen“ ein.
+      </div>
+      <div class="flex gap-4 mt-3 text-xs">
+        <button id="selectAll" class="text-brand font-medium hover:underline focus-ring">Alle auswählen</button>
+        <button id="selectNone" class="text-brand font-medium hover:underline focus-ring">Keine auswählen</button>
+      </div>
+    </div>
+
+    <!-- Verspätungsangaben (nur im Modus "Verspätung" sichtbar) -->
+    <div id="verspaetungCard" class="bg-surface border border-line rounded-xl2 p-4 sm:p-5 hidden">
+      <h2 class="text-sm font-semibold text-mute mb-3">Verspätungsangaben</h2>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="ankunftszeit" class="block text-xs text-mute mb-1">Voraussichtliche Ankunft</label>
+          <input id="ankunftszeit" type="time"
+            class="w-full rounded-lg border border-line px-3 py-2 text-sm focus-ring">
+        </div>
+        <div>
+          <label for="verspaetungGrund" class="block text-xs text-mute mb-1">Grund (optional)</label>
+          <input id="verspaetungGrund" type="text" placeholder="z. B. Bus verpasst"
+            class="w-full rounded-lg border border-line px-3 py-2 text-sm focus-ring">
+        </div>
+      </div>
+    </div>
+
+    <!-- Versandmodus -->
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <h2 class="text-sm font-semibold text-mute mb-3">Versandart</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label class="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input type="radio" name="mode" value="mailto" checked class="mt-0.5 accent-brand">
+          <span>
+            <span class="block text-sm font-medium text-ink">Sofortstart</span>
+            <span class="block text-xs text-mute">Öffnet jede Mail in deinem Mail-Programm</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input type="radio" name="mode" value="api" class="mt-0.5 accent-brand">
+          <span>
+            <span class="block text-sm font-medium text-ink">SMTP-API</span>
+            <span class="block text-xs text-mute">Verschickt automatisch über dein Backend</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Empfänger -->
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <h2 class="text-sm font-semibold text-mute mb-3">Empfänger</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label class="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input type="radio" name="recipientMode" value="combined" checked class="mt-0.5 accent-brand">
+          <span>
+            <span class="block text-sm font-medium text-ink">Eine E-Mail an alle</span>
+            <span class="block text-xs text-mute">Alle Lehrer:innen im An-Feld, sehen sich gegenseitig</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input type="radio" name="recipientMode" value="separate" class="mt-0.5 accent-brand">
+          <span>
+            <span class="block text-sm font-medium text-ink">Getrennte E-Mails</span>
+            <span class="block text-xs text-mute">Jede Lehrkraft bekommt eine eigene Mail</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <button id="sendBtn" class="w-full rounded-xl2 bg-brand hover:bg-brand-dark text-white font-semibold text-base py-4 shadow-sm focus-ring transition-colors">
+      Heute krankmelden
+    </button>
+
+    <!-- Ergebnisse -->
+    <div id="results" class="space-y-3 hidden"></div>
+
+  </section>
+
+  <!-- ===================== TAB: EINSTELLUNGEN ===================== -->
+  <section id="panel-settings" class="space-y-5 hidden">
+
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <h2 class="text-sm font-semibold text-mute mb-3">SMTP-API-Endpunkt</h2>
+      <p class="text-xs text-mute mb-2">Wird nur im Modus „SMTP-API“ verwendet, siehe Beispiel-Fetch im Code.</p>
+      <input id="apiEndpoint" type="url" placeholder="https://mein-backend.example.com/send-mail"
+        class="w-full rounded-lg border border-line px-3 py-2 text-sm focus-ring">
+    </div>
+
+    <div class="bg-surface border border-line rounded-xl2 p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-mute">Stundenplan</h2>
+      </div>
+      <div id="scheduleEditor" class="space-y-4"></div>
+    </div>
+
+    <div class="flex gap-3">
+      <button id="saveSettings" class="flex-1 rounded-xl2 bg-brand hover:bg-brand-dark text-white font-semibold text-sm py-3 focus-ring transition-colors">
+        Speichern
+      </button>
+      <button id="resetSettings" class="rounded-xl2 border border-line text-mute font-medium text-sm px-4 py-3 hover:bg-canvas focus-ring">
+        Zurücksetzen
+      </button>
+    </div>
+    <p id="saveNote" class="text-xs text-brand-dark hidden">Gespeichert.</p>
+
+  </section>
+
+</div>
+
+<script>
+/* ---------------------------------------------------------------------
+   Konstanten & Storage-Keys
+--------------------------------------------------------------------- */
+const WEEKDAYS = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
+const LS_SCHEDULE = 'krankmelden_stundenplan';
+const LS_STUDENT  = 'krankmelden_schueler';
+const LS_SETTINGS = 'krankmelden_settings';
+const LS_REMINDERS = 'krankmelden_erinnerungen';
+
+/* Standard-Stundenplan: wird auf jedem neuen Gerät automatisch geladen,
+   solange dort noch nichts im LocalStorage gespeichert wurde. In den
+   Einstellungen jederzeit änderbar. */
+const DEFAULT_SCHEDULE = {
+  Montag: [
+    { id: cryptoId(), fach: 'Geschichte', anrede: 'Herr', nachname: 'Koch', email: 'alexander.koch@kgs-badlauterberg.de', stunde: '1/2' },
+    { id: cryptoId(), fach: 'Physik', anrede: 'Frau', nachname: 'Bierwirth', email: 'rebekka.bierwirth@kgs-badlauterberg.de', stunde: '3/4' },
+    { id: cryptoId(), fach: 'Mathe', anrede: 'Frau', nachname: 'Blumenstein', email: 'elina.blumenstein@kgs-badlauterberg.de', stunde: '5' },
+    { id: cryptoId(), fach: 'Erdkunde', anrede: 'Frau', nachname: 'Nürnberger-Wolf', email: 'j.nuernberger-wolf@kgs-badlauterberg.de', stunde: '6' }
+  ],
+  Dienstag: [
+    { id: cryptoId(), fach: 'WPK', anrede: 'Frau', nachname: 'Herrmann', email: 'sarah.herrmann@kgs-badlauterberg.de', stunde: '2' },
+    { id: cryptoId(), fach: 'Deutsch', anrede: 'Frau', nachname: 'Weide', email: 'lisa.weide@kgs-badlauterberg.de', stunde: '3/4' },
+    { id: cryptoId(), fach: 'Politik', anrede: 'Frau', nachname: 'Truffner', email: 'ann-kathrin.truffner@kgs-badlauterberg.de', stunde: '5/6' },
+    { id: cryptoId(), fach: 'Kunst', anrede: 'Frau', nachname: 'Leise', email: 'louisa.leise@kgs-badlauterberg.de', stunde: '7/8' }
+  ],
+  Mittwoch: [
+    { id: cryptoId(), fach: 'Bio', anrede: 'Frau', nachname: 'Herrmann', email: 'sarah.herrmann@kgs-badlauterberg.de', stunde: '1/2' },
+    { id: cryptoId(), fach: 'Mathe', anrede: 'Frau', nachname: 'Blumenstein', email: 'elina.blumenstein@kgs-badlauterberg.de', stunde: '3/4' },
+    { id: cryptoId(), fach: 'Englisch', anrede: 'Herr', nachname: 'Karpstein', email: 'christoph.karpstein@kgs-badlauterberg.de', stunde: '5/6' },
+    { id: cryptoId(), fach: 'Deutsch', anrede: 'Frau', nachname: 'Weide', email: 'lisa.weide@kgs-badlauterberg.de', stunde: '5/6' },
+    { id: cryptoId(), fach: 'Politik', anrede: 'Frau', nachname: 'Truffner', email: 'ann-kathrin.truffner@kgs-badlauterberg.de', stunde: '7/8' }
+  ],
+  Donnerstag: [
+    { id: cryptoId(), fach: 'Werte & Normen', anrede: 'Frau', nachname: 'Requardt', email: 'aiden.requardt@kgs-badlauterberg.de', stunde: '1/2' },
+    { id: cryptoId(), fach: 'Englisch', anrede: 'Herr', nachname: 'Karpstein', email: 'christoph.karpstein@kgs-badlauterberg.de', stunde: '3/4' }
+  ],
+  Freitag: [
+    { id: cryptoId(), fach: 'WPK', anrede: 'Frau', nachname: 'Alert', email: 'andrea.alert@kgs-badlauterberg.de', stunde: '1/2' },
+    { id: cryptoId(), fach: 'Chemie', anrede: 'Herr', nachname: 'Pauls', email: 'michael.pauls@kgs-badlauterberg.de', stunde: '3/4' },
+    { id: cryptoId(), fach: 'Sport', anrede: 'Herr', nachname: 'Karpstein', email: 'christoph.karpstein@kgs-badlauterberg.de', stunde: '5/6' }
+  ]
+};
+
+/* Standard-Schülerdaten: ebenfalls sofort auf neuen Geräten vorhanden,
+   in "Angaben" jederzeit überschreibbar. */
+const DEFAULT_STUDENT = { name: 'Moaz', klasse: '11G1' };
+
+function cryptoId() {
+  return 'x' + Math.random().toString(36).slice(2, 10);
+}
+
+/* ---------------------------------------------------------------------
+   State laden/speichern
+--------------------------------------------------------------------- */
+function loadSchedule() {
+  try {
+    const raw = localStorage.getItem(LS_SCHEDULE);
+    if (!raw) return structuredClone(DEFAULT_SCHEDULE);
+    const parsed = JSON.parse(raw);
+    WEEKDAYS.forEach(d => { if (!Array.isArray(parsed[d])) parsed[d] = []; });
+    return parsed;
+  } catch { return structuredClone(DEFAULT_SCHEDULE); }
+}
+function saveSchedule(s) { localStorage.setItem(LS_SCHEDULE, JSON.stringify(s)); }
+
+function loadStudent() {
+  try {
+    const raw = localStorage.getItem(LS_STUDENT);
+    return raw ? JSON.parse(raw) : { ...DEFAULT_STUDENT };
+  } catch { return { ...DEFAULT_STUDENT }; }
+}
+function saveStudent(s) { localStorage.setItem(LS_STUDENT, JSON.stringify(s)); }
+
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(LS_SETTINGS)) || { apiEndpoint: '' }; }
+  catch { return { apiEndpoint: '' }; }
+}
+function saveSettings(s) { localStorage.setItem(LS_SETTINGS, JSON.stringify(s)); }
+
+function loadReminders() {
+  try { return JSON.parse(localStorage.getItem(LS_REMINDERS)) || []; }
+  catch { return []; }
+}
+function saveReminders(r) { localStorage.setItem(LS_REMINDERS, JSON.stringify(r)); }
+
+let schedule = loadSchedule();
+let student  = loadStudent();
+let settings = loadSettings();
+let reminders = loadReminders();
+
+/* ---------------------------------------------------------------------
+   Datum / Wochentag
+--------------------------------------------------------------------- */
+function getTodayInfo() {
+  const now = new Date();
+  const jsDay = now.getDay(); // 0=So .. 6=Sa
+  const map = { 1: 'Montag', 2: 'Dienstag', 3: 'Mittwoch', 4: 'Donnerstag', 5: 'Freitag' };
+  const weekday = map[jsDay] || null; // null am Wochenende
+  const dateStr = now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const longStr = now.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  return { weekday, dateStr, longStr, isWeekend: !weekday };
+}
+const today = getTodayInfo();
+
+const WEEKDAY_INDEX = { Montag: 1, Dienstag: 2, Mittwoch: 3, Donnerstag: 4, Freitag: 5 };
+
+// Liefert Datumsangaben für den im Dropdown gewählten Wochentag: wenn das
+// der heutige Tag ist, ist es einfach heute; sonst der nächste kommende
+// Tag mit diesem Namen (z. B. Sonntagabend "Montag" wählen -> morgen).
+function getDateInfoForDay(dayName) {
+  const now = new Date();
+  const todayIdx = now.getDay();
+  const targetIdx = WEEKDAY_INDEX[dayName];
+  let diff = targetIdx - todayIdx;
+  if (diff < 0) diff += 7;
+  const target = new Date(now);
+  target.setDate(now.getDate() + diff);
+  return {
+    dateStr: target.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    longStr: target.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  };
+}
+
+/* ---------------------------------------------------------------------
+   Tabs
+--------------------------------------------------------------------- */
+const tabButtons = document.querySelectorAll('.tab-btn');
+const panels = { melden: document.getElementById('panel-melden'), settings: document.getElementById('panel-settings') };
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabButtons.forEach(b => b.dataset.active = 'false');
+    btn.dataset.active = 'true';
+    Object.entries(panels).forEach(([key, el]) => el.classList.toggle('hidden', key !== btn.dataset.tab));
+  });
+});
+
+/* ---------------------------------------------------------------------
+   Kopfbereich befüllen
+--------------------------------------------------------------------- */
+document.getElementById('headerWeekday').textContent = today.weekday || 'Wochenende';
+document.getElementById('headerDate').textContent = today.dateStr;
+document.getElementById('todayLine').textContent = today.isWeekend
+  ? 'Heute ist kein Schultag – wähle unten einen Tag zum Melden.'
+  : `Heute ist ${today.longStr}.`;
+
+/* ---------------------------------------------------------------------
+   Tageswahl (Melden-Tab)
+--------------------------------------------------------------------- */
+const daySelect = document.getElementById('daySelect');
+WEEKDAYS.forEach(d => {
+  const opt = document.createElement('option');
+  opt.value = d; opt.textContent = d;
+  daySelect.appendChild(opt);
+});
+daySelect.value = today.weekday || 'Montag';
+
+const weekendNote = document.getElementById('weekendNote');
+if (today.isWeekend) {
+  weekendNote.classList.remove('hidden');
+  weekendNote.textContent = `Heute ist Wochenende. „${daySelect.value}“ ist vorausgewählt – ändere den Tag bei Bedarf.`;
+}
+
+daySelect.addEventListener('change', renderSubjects);
+
+/* ---------------------------------------------------------------------
+   Fächerliste rendern
+--------------------------------------------------------------------- */
+function renderSubjects() {
+  const day = daySelect.value;
+  const list = document.getElementById('subjectList');
+  const empty = document.getElementById('noSubjects');
+  list.innerHTML = '';
+  const subs = (schedule[day] || []).slice().sort((a, b) => (a.stunde || '').localeCompare(b.stunde || '', 'de', { numeric: true }));
+
+  if (subs.length === 0) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  subs.forEach(s => {
+    const row = document.createElement('label');
+    row.className = 'flex items-center gap-3 rounded-lg border border-line px-3 py-2.5 cursor-pointer hover:border-brand/50';
+    row.innerHTML = `
+      <input type="checkbox" class="subj-check w-4 h-4 rounded" data-id="${s.id}" checked>
+      <span class="flex-1 min-w-0">
+        <span class="block text-sm font-medium text-ink truncate">${escapeHtml(s.fach)}${s.stunde ? ` <span class="text-mute font-normal">· ${escapeHtml(s.stunde)}. Stunde</span>` : ''}</span>
+        <span class="block text-xs text-mute truncate">${escapeHtml(s.anrede)} ${escapeHtml(s.nachname)} · ${escapeHtml(s.email)}</span>
+      </span>
+    `;
+    list.appendChild(row);
+  });
+}
+renderSubjects();
+
+document.getElementById('selectAll').addEventListener('click', () => {
+  document.querySelectorAll('.subj-check').forEach(c => c.checked = true);
+});
+document.getElementById('selectNone').addEventListener('click', () => {
+  document.querySelectorAll('.subj-check').forEach(c => c.checked = false);
+});
+
+/* ---------------------------------------------------------------------
+   Erinnerungen: "schriftliche Entschuldigung mitbringen"
+   Bleiben so lange sichtbar, bis sie manuell abgehakt werden.
+--------------------------------------------------------------------- */
+function renderReminders() {
+  const box = document.getElementById('reminderBox');
+  box.innerHTML = '';
+  if (reminders.length === 0) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+
+  reminders.forEach(r => {
+    const items = (r.items || []).map(i =>
+      `<li>${escapeHtml(i.fach)}${i.stunde ? ` · ${escapeHtml(i.stunde)}. Stunde` : ''}</li>`
+    ).join('');
+    const card = document.createElement('div');
+    card.className = 'flex items-start gap-3 bg-warn-light border border-warn/30 rounded-xl2 px-4 py-3';
+    card.innerHTML = `
+      <label class="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
+        <input type="checkbox" class="reminder-check mt-1 w-4 h-4 rounded" data-id="${r.id}">
+        <span class="flex-1 min-w-0">
+          <span class="block text-sm font-semibold text-ink">Schriftliche Entschuldigung mitbringen</span>
+          <span class="block text-xs text-mute mb-1">${escapeHtml(r.longStr || r.dateStr)}</span>
+          <ul class="text-xs text-mute list-disc list-inside space-y-0.5">${items}</ul>
+        </span>
+      </label>
+      <button type="button" class="print-reminder shrink-0 rounded-lg border border-warn/40 text-warn text-xs font-semibold px-3 py-2 hover:bg-white focus-ring" data-id="${r.id}">
+        Vorlage drucken
+      </button>
+    `;
+    card.querySelector('.reminder-check').addEventListener('change', (e) => {
+      if (!e.target.checked) return;
+      reminders = reminders.filter(x => x.id !== r.id);
+      saveReminders(reminders);
+      renderReminders();
+    });
+    card.querySelector('.print-reminder').addEventListener('click', () => openEntschuldigungsVorlage(r));
+    box.appendChild(card);
+  });
+}
+renderReminders();
+
+/* ---------------------------------------------------------------------
+   Druckbare/handschriftlich ausfüllbare Entschuldigungs-Vorlage
+--------------------------------------------------------------------- */
+function openEntschuldigungsVorlage(r) {
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Der Browser hat das Öffnen des Vorlagenfensters blockiert. Bitte Pop-ups für diese Seite erlauben.');
+    return;
+  }
+  const itemsHtml = (r.items || []).map(i =>
+    `<li>${escapeHtml(i.fach)}${i.stunde ? ` (${escapeHtml(i.stunde)}. Stunde)` : ''}</li>`
+  ).join('');
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Entschuldigung – ${escapeHtml(r.dateStr)}</title>
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1B2430; max-width: 640px; margin: 56px auto; line-height: 1.7; padding: 0 24px; }
+  h1 { text-align: center; font-size: 22px; letter-spacing: .03em; margin-bottom: 40px; }
+  .field { margin-bottom: 20px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #66707E; }
+  .value { font-size: 16px; }
+  .fillable { display: inline-block; min-width: 220px; border-bottom: 1px solid #1B2430; }
+  ul { margin: 6px 0 0 20px; padding: 0; }
+  .sign { display: flex; justify-content: space-between; margin-top: 90px; gap: 40px; }
+  .sign div { flex: 1; border-top: 1px solid #1B2430; padding-top: 6px; font-size: 12px; text-align: center; color: #66707E; }
+  .actions { text-align: center; margin-top: 40px; }
+  .actions button { font-family: inherit; font-size: 13px; padding: 8px 18px; border-radius: 8px; border: 1px solid #1B2430; background: #fff; cursor: pointer; }
+  @media print { .actions { display: none; } body { margin: 20px auto; } }
+</style>
+</head>
+<body>
+  <h1>Entschuldigung</h1>
+
+  <div class="field">
+    <div class="label">Datum des Fehlens</div>
+    <div class="value">${escapeHtml(r.longStr || r.dateStr)}</div>
+  </div>
+
+  <div class="field">
+    <div class="label">Schüler:in</div>
+    <div class="value">${r.name ? escapeHtml(r.name) : '<span class="fillable">&nbsp;</span>'}, Klasse ${r.klasse ? escapeHtml(r.klasse) : '<span class="fillable">&nbsp;</span>'}</div>
+  </div>
+
+  <div class="field">
+    <div class="label">Versäumter Unterricht</div>
+    <ul>${itemsHtml}</ul>
+  </div>
+
+  <div class="field">
+    <div class="label">Grund</div>
+    <div class="value">aus gesundheitlichen Gründen (Krankheit)</div>
+  </div>
+
+  <p>Hiermit wird das oben genannte Fehlen im Unterricht entschuldigt.</p>
+
+  <div class="sign">
+    <div>Ort, Datum</div>
+    <div>Unterschrift Erziehungsberechtigte/r</div>
+  </div>
+
+  <div class="actions">
+    <button onclick="window.print()">Drucken</button>
+  </div>
+</body>
+</html>`);
+  win.document.close();
+  win.focus();
+}
+
+/* ---------------------------------------------------------------------
+   Meldungsart umschalten (Krankmeldung / Verspätung)
+--------------------------------------------------------------------- */
+document.querySelectorAll('input[name="meldeArt"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const isVerspaetung = document.querySelector('input[name="meldeArt"]:checked').value === 'verspaetung';
+    document.getElementById('verspaetungCard').classList.toggle('hidden', !isVerspaetung);
+    document.getElementById('sendBtn').textContent = isVerspaetung ? 'Verspätung melden' : 'Heute krankmelden';
+  });
+});
+
+/* ---------------------------------------------------------------------
+   Angaben zur Person vorbefüllen
+--------------------------------------------------------------------- */
+document.getElementById('stuName').value = student.name || '';
+document.getElementById('stuKlasse').value = student.klasse || '';
+
+/* ---------------------------------------------------------------------
+   Hilfsfunktionen
+--------------------------------------------------------------------- */
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function anredeText(anrede) {
+  return anrede === 'Frau' ? 'Sehr geehrte Frau' : 'Sehr geehrter Herr';
+}
+
+// teacherGroups: Array von { anrede, nachname, email, faecher: [...] }
+// Ein Element => normale Einzelmail mit persönlicher Anrede.
+// Mehrere Elemente => eine gemeinsame Mail an alle, Anrede "Sehr geehrte Damen und Herren".
+// opts.kind: 'krank' (Standard) oder 'verspaetung'; opts.ankunft/opts.grund nur bei Verspätung relevant.
+function buildEmail(nameSchueler, klasse, dateStr, teacherGroups, opts = {}) {
+  const kind = opts.kind || 'krank';
+  const allFaecher = teacherGroups.flatMap(g => g.faecher);
+  const faecherText = allFaecher.length > 1
+    ? `die Fächer ${allFaecher.slice(0, -1).join(', ')} und ${allFaecher[allFaecher.length - 1]}`
+    : `das Fach ${allFaecher[0]}`;
+
+  const greeting = teacherGroups.length === 1
+    ? `${anredeText(teacherGroups[0].anrede)} ${teacherGroups[0].nachname}`
+    : 'Sehr geehrte Damen und Herren';
+
+  const nameKlasseText = `${nameSchueler || '[Name]'}, Klasse ${klasse || '[Klasse]'}`;
+
+  if (kind === 'verspaetung') {
+    const ankunftSatz = opts.ankunft ? ` Ich werde voraussichtlich gegen ${opts.ankunft} Uhr eintreffen.` : '';
+    const grundSatz = opts.grund ? ` Grund: ${opts.grund}.` : '';
+    const subject = `Verspätung ${nameKlasseText} – ${dateStr}`;
+    const body =
+`${greeting},
+
+ich werde heute leider verspätet zum Unterricht kommen und kann daher nicht pünktlich am Unterricht in ${faecherText} teilnehmen.${ankunftSatz}${grundSatz}
+
+Mit freundlichen Grüßen
+${nameKlasseText}`;
+    return { to: teacherGroups.map(g => g.email), subject, body };
+  }
+
+  const subject = `Krankmeldung ${nameKlasseText} – ${dateStr}`;
+  const body =
+`${greeting},
+
+ich kann heute aus gesundheitlichen Gründen leider nicht am Unterricht in ${faecherText} teilnehmen. Ich bitte Sie, mein Fehlen zu entschuldigen.
+
+Die schriftliche Entschuldigung reiche ich schnellstmöglich nach.
+
+Mit freundlichen Grüßen
+${nameKlasseText}`;
+
+  return { to: teacherGroups.map(g => g.email), subject, body };
+}
+
+/* ---------------------------------------------------------------------
+   Krankmelden-Button
+--------------------------------------------------------------------- */
+document.getElementById('sendBtn').addEventListener('click', async () => {
+  const nameSchueler = document.getElementById('stuName').value.trim();
+  const klasse = document.getElementById('stuKlasse').value.trim();
+  student = { name: nameSchueler, klasse };
+  saveStudent(student);
+
+  const meldeArt = document.querySelector('input[name="meldeArt"]:checked').value;
+  const day = daySelect.value;
+  const dayDateInfo = getDateInfoForDay(day);
+  const checkedIds = [...document.querySelectorAll('.subj-check:checked')].map(c => c.dataset.id);
+  const chosen = (schedule[day] || []).filter(s => checkedIds.includes(s.id));
+
+  const resultsBox = document.getElementById('results');
+  resultsBox.innerHTML = '';
+  resultsBox.classList.add('hidden');
+
+  if (!nameSchueler || !klasse) {
+    showNotice('Bitte Name und Klasse ausfüllen.', 'bad');
+    return;
+  }
+  if (chosen.length === 0) {
+    showNotice('Kein Fach ausgewählt – es gibt nichts zu melden.', 'bad');
+    return;
+  }
+
+  let ankunft = '', grund = '';
+  if (meldeArt === 'verspaetung') {
+    ankunft = document.getElementById('ankunftszeit').value;
+    grund = document.getElementById('verspaetungGrund').value.trim();
+    if (!ankunft) {
+      showNotice('Bitte eine voraussichtliche Ankunftszeit angeben.', 'bad');
+      return;
+    }
+  }
+
+  // Nach Lehrer-E-Mail gruppieren, falls ein/e Lehrer/in mehrere gewählte Fächer hat
+  // Schlüssel = E-Mail + Anrede + Nachname: fasst nur Fächer derselben Lehrkraft
+  // zusammen, statt allein anhand der (evtl. zufällig gleichen) E-Mail-Adresse.
+  const groups = new Map();
+  chosen.forEach(s => {
+    const key = `${s.email.trim().toLowerCase()}|${s.anrede}|${s.nachname.trim().toLowerCase()}`;
+    if (!groups.has(key)) {
+      groups.set(key, { anrede: s.anrede, nachname: s.nachname, email: s.email, faecher: [] });
+    }
+    groups.get(key).faecher.push(s.fach);
+  });
+
+  const teacherGroups = [...groups.values()];
+  const recipientMode = document.querySelector('input[name="recipientMode"]:checked').value;
+  const emailOpts = { kind: meldeArt, ankunft, grund };
+  const emails = recipientMode === 'combined'
+    ? [buildEmail(nameSchueler, klasse, dayDateInfo.dateStr, teacherGroups, emailOpts)]
+    : teacherGroups.map(g => buildEmail(nameSchueler, klasse, dayDateInfo.dateStr, [g], emailOpts));
+
+  // Erinnerung "schriftliche Entschuldigung mitbringen" nur bei Krankmeldung,
+  // nicht bei einer reinen Verspätung.
+  if (meldeArt === 'krank') {
+    reminders.push({
+      id: cryptoId(),
+      dateStr: dayDateInfo.dateStr,
+      longStr: dayDateInfo.longStr,
+      name: nameSchueler,
+      klasse: klasse,
+      items: chosen.map(s => ({ fach: s.fach, stunde: s.stunde }))
+    });
+    saveReminders(reminders);
+    renderReminders();
+  }
+
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+
+  resultsBox.classList.remove('hidden');
+  const heading = document.createElement('h3');
+  heading.className = 'text-sm font-semibold text-mute pt-1';
+  heading.textContent = `${emails.length} ${emails.length === 1 ? 'E-Mail' : 'E-Mails'} vorbereitet`;
+  resultsBox.appendChild(heading);
+
+  if (mode === 'mailto') {
+    emails.forEach(mail => resultsBox.appendChild(renderMailCard(mail, 'mailto')));
+  } else {
+    for (const mail of emails) {
+      const card = renderMailCard(mail, 'api');
+      resultsBox.appendChild(card);
+      sendViaApi(mail, card); // Status wird direkt in die Karte geschrieben
+    }
+  }
+});
+
+function showNotice(text, kind) {
+  const box = document.getElementById('results');
+  box.classList.remove('hidden');
+  box.innerHTML = `<div class="rounded-lg px-3 py-2.5 text-sm ${kind === 'bad' ? 'bg-warn-light text-warn' : 'bg-brand-light text-brand-dark'}">${escapeHtml(text)}</div>`;
+}
+
+function renderMailCard(mail, mode) {
+  const card = document.createElement('div');
+  card.className = 'bg-surface border border-line rounded-xl2 p-4';
+  const toList = mail.to.join(', ');
+  const mailtoHref = `mailto:${mail.to.map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`;
+  card.innerHTML = `
+    <div class="flex items-start justify-between gap-3 mb-2">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-ink truncate">${escapeHtml(toList)}</p>
+        <p class="text-xs text-mute truncate">${escapeHtml(mail.subject)}</p>
+      </div>
+      ${mode === 'mailto'
+        ? `<a href="${mailtoHref}" class="shrink-0 rounded-lg bg-brand text-white text-xs font-semibold px-3 py-2 hover:bg-brand-dark focus-ring">In Mail öffnen</a>`
+        : `<span class="api-status shrink-0 rounded-lg bg-canvas text-mute text-xs font-medium px-3 py-2">Wird gesendet …</span>`
+      }
+    </div>
+    <pre class="text-xs text-mute whitespace-pre-wrap font-sans bg-canvas rounded-lg p-3">${escapeHtml(mail.body)}</pre>
+  `;
+  return card;
+}
+
+/* ---------------------------------------------------------------------
+   Modus 2: SMTP-API-Anbindung (Vorlage)
+   Erwartetes Backend-Format (Beispiel):
+   POST {apiEndpoint}
+   Body: { "to": ["a@schule.de", "b@schule.de"], "subject": "...", "text": "..." }
+   "to" ist immer ein Array - bei "Getrennte E-Mails" enthält es nur eine Adresse,
+   bei "Eine E-Mail an alle" mehrere. Das Backend muss das entsprechend als
+   To-Liste an den SMTP-Versand übergeben.
+   Antwort: 2xx bei Erfolg
+--------------------------------------------------------------------- */
+async function sendViaApi(mail, card) {
+  const statusEl = card.querySelector('.api-status');
+  const endpoint = settings.apiEndpoint;
+
+  if (!endpoint) {
+    statusEl.textContent = 'Kein API-Endpunkt hinterlegt';
+    statusEl.classList.add('bg-warn-light', 'text-warn');
+    return;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: mail.to, subject: mail.subject, text: mail.body })
+    });
+
+    if (response.ok) {
+      statusEl.textContent = 'Gesendet';
+      statusEl.classList.add('bg-brand-light', 'text-brand-dark');
+    } else {
+      statusEl.textContent = `Fehler (${response.status})`;
+      statusEl.classList.add('bg-warn-light', 'text-warn');
+    }
+  } catch (err) {
+    statusEl.textContent = 'Backend nicht erreichbar';
+    statusEl.classList.add('bg-warn-light', 'text-warn');
+  }
+}
+
+/* ---------------------------------------------------------------------
+   EINSTELLUNGEN: Stundenplan-Editor
+--------------------------------------------------------------------- */
+const scheduleEditor = document.getElementById('scheduleEditor');
+
+// Merkt sich, welche Tage manuell auf-/zugeklappt wurden, damit "+ Fach
+// hinzufügen" & Co. nicht bei jedem Neuzeichnen alles wieder auf den
+// heutigen Wochentag zurücksetzen.
+const openDays = new Set([today.weekday || 'Montag']);
+
+function renderScheduleEditor() {
+  scheduleEditor.innerHTML = '';
+  WEEKDAYS.forEach(day => {
+    const block = document.createElement('details');
+    block.className = 'border border-line rounded-lg overflow-hidden';
+    block.open = openDays.has(day);
+    block.addEventListener('toggle', () => {
+      if (block.open) openDays.add(day); else openDays.delete(day);
+    });
+    const count = (schedule[day] || []).length;
+    block.innerHTML = `
+      <summary class="cursor-pointer select-none px-3 py-2.5 bg-canvas text-sm font-medium text-ink flex items-center justify-between">
+        <span>${day}</span>
+        <span class="text-xs text-mute">${count} ${count === 1 ? 'Fach' : 'Fächer'}</span>
+      </summary>
+      <div class="p-3 space-y-2" data-day-rows="${day}"></div>
+      <div class="px-3 pb-3">
+        <button type="button" data-add-day="${day}" class="text-xs font-medium text-brand hover:underline focus-ring">+ Fach hinzufügen</button>
+      </div>
+    `;
+    scheduleEditor.appendChild(block);
+    renderDayRows(day);
+  });
+
+  scheduleEditor.querySelectorAll('[data-add-day]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const day = btn.dataset.addDay;
+      openDays.add(day); // Tag beim Hinzufügen sicher offen halten
+      schedule[day].push({ id: cryptoId(), fach: '', anrede: 'Frau', nachname: '', email: '', stunde: '' });
+      renderScheduleEditor();
+    });
+  });
+}
+
+function renderDayRows(day) {
+  const container = scheduleEditor.querySelector(`[data-day-rows="${day}"]`);
+  const rows = schedule[day] || [];
+  if (rows.length === 0) {
+    container.innerHTML = `<p class="text-xs text-mute py-1">Noch keine Fächer.</p>`;
+    return;
+  }
+  container.innerHTML = '';
+  rows.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'grid grid-cols-12 gap-2 items-center';
+    row.innerHTML = `
+      <input value="${escapeAttr(s.fach)}" data-field="fach" placeholder="Fach" class="col-span-3 rounded-lg border border-line px-2 py-1.5 text-xs focus-ring">
+      <select data-field="anrede" class="col-span-2 rounded-lg border border-line px-1 py-1.5 text-xs focus-ring">
+        <option value="Frau" ${s.anrede === 'Frau' ? 'selected' : ''}>Frau</option>
+        <option value="Herr" ${s.anrede === 'Herr' ? 'selected' : ''}>Herr</option>
+      </select>
+      <input value="${escapeAttr(s.nachname)}" data-field="nachname" placeholder="Nachname" class="col-span-2 rounded-lg border border-line px-2 py-1.5 text-xs focus-ring">
+      <input value="${escapeAttr(s.email)}" data-field="email" placeholder="E-Mail" type="email" class="col-span-3 rounded-lg border border-line px-2 py-1.5 text-xs focus-ring">
+      <input value="${escapeAttr(s.stunde)}" data-field="stunde" placeholder="Std." class="col-span-1 rounded-lg border border-line px-2 py-1.5 text-xs focus-ring">
+      <button type="button" data-remove="${s.id}" class="col-span-1 text-mute hover:text-bad text-sm focus-ring" title="Entfernen">✕</button>
+    `;
+    row.querySelectorAll('[data-field]').forEach(input => {
+      input.addEventListener('input', () => { s[input.dataset.field] = input.value; });
+    });
+    row.querySelector('[data-remove]').addEventListener('click', () => {
+      schedule[day] = schedule[day].filter(x => x.id !== s.id);
+      renderScheduleEditor();
+    });
+    container.appendChild(row);
+  });
+}
+
+function escapeAttr(str) { return escapeHtml(str || ''); }
+
+renderScheduleEditor();
+document.getElementById('apiEndpoint').value = settings.apiEndpoint || '';
+
+/* ---------------------------------------------------------------------
+   Speichern / Zurücksetzen
+--------------------------------------------------------------------- */
+document.getElementById('saveSettings').addEventListener('click', () => {
+  saveSchedule(schedule);
+  settings.apiEndpoint = document.getElementById('apiEndpoint').value.trim();
+  saveSettings(settings);
+  daySelect.value = daySelect.value; // Auswahl beibehalten
+  renderSubjects();
+  const note = document.getElementById('saveNote');
+  note.classList.remove('hidden');
+  setTimeout(() => note.classList.add('hidden'), 2000);
+});
+
+document.getElementById('resetSettings').addEventListener('click', () => {
+  if (!confirm('Stundenplan wirklich auf die Beispiel-Daten zurücksetzen?')) return;
+  schedule = structuredClone(DEFAULT_SCHEDULE);
+  saveSchedule(schedule);
+  renderScheduleEditor();
+  renderSubjects();
+});
+</script>
+</body>
+</html>
