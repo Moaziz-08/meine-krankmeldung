@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Weicher Farbverlauf im Farbton deiner App -->
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#146B69"/>
+      <stop offset="100%" stop-color="#0E4E4D"/>
+    </linearGradient>
+    <!-- Subtiler Schatten für das Symbol -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Abgerundeter App-Icon-Hintergrund (iOS/Android Style) -->
+  <rect width="512" height="512" rx="115" fill="url(#brandGrad)"/>
+
+  <!-- Symbol-Gruppe -->
+  <g filter="url(#dropShadow)">
+    <!-- Medizinisches Kreuz -->
+    <path d="M 216 96 H 296 V 196 H 396 V 276 H 296 V 416 H 216 V 276 H 116 V 196 H 216 Z" 
+          fill="#E3F0EF"/>
+
+    <!-- Briefumschlag -->
+    <g transform="translate(146, 176)">
+      <!-- Umschlag-Körper -->
+      <rect x="0" y="0" width="220" height="150" rx="18" fill="#FFFFFF" stroke="#146B69" stroke-width="12" stroke-linejoin="round"/>
+      <!-- Umschlag-Falten -->
+      <path d="M 12 16 L 110 88 L 208 16" fill="none" stroke="#146B69" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 16 134 L 82 78" fill="none" stroke="#146B69" stroke-width="10" stroke-linecap="round"/>
+      <path d="M 204 134 L 138 78" fill="none" stroke="#146B69" stroke-width="10" stroke-linecap="round"/>
+      
+      <!-- Kleines Kreuz auf der Lasche -->
+      <path d="M 110 40 V 58 M 101 49 H 119" stroke="#146B69" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
