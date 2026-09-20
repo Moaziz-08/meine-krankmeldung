@@ -678,7 +678,7 @@
 
 <script>
 /* ---------------------------------------------------------------------
-   IndexedDB Helfer für Nachweisfotos (Kein 5MB LocalStorage Limit)
+   IndexedDB Helfer für Nachweisfotos (Offline-Cache)
 --------------------------------------------------------------------- */
 const DB_NAME = 'KrankmeldungDB_App';
 const DB_VERSION = 1;
@@ -770,7 +770,6 @@ function isSubjectInWeek(s, dateOrIso) {
    Ferien- & Feiertagskalender (Niedersachsen)
 --------------------------------------------------------------------- */
 const NIEDERSACHSEN_FERIEN = [
-  // 2024/2025
   { start: '2024-10-04', end: '2024-10-19', name: 'Herbstferien' },
   { start: '2024-12-23', end: '2025-01-04', name: 'Weihnachtsferien' },
   { start: '2025-02-03', end: '2025-02-04', name: 'Halbjahresferien' },
@@ -778,7 +777,6 @@ const NIEDERSACHSEN_FERIEN = [
   { start: '2025-05-30', end: '2025-05-30', name: 'Brückentag' },
   { start: '2025-06-10', end: '2025-06-10', name: 'Pfingstferien' },
   { start: '2025-07-03', end: '2025-08-13', name: 'Sommerferien' },
-  // 2025/2026
   { start: '2025-10-13', end: '2025-10-25', name: 'Herbstferien' },
   { start: '2025-12-22', end: '2026-01-05', name: 'Weihnachtsferien' },
   { start: '2026-01-29', end: '2026-01-30', name: 'Halbjahresferien' },
@@ -786,7 +784,6 @@ const NIEDERSACHSEN_FERIEN = [
   { start: '2026-05-15', end: '2026-05-15', name: 'Brückentag' },
   { start: '2026-05-26', end: '2026-05-26', name: 'Pfingstferien' },
   { start: '2026-07-02', end: '2026-08-12', name: 'Sommerferien' },
-  // 2026/2027
   { start: '2026-10-12', end: '2026-10-24', name: 'Herbstferien' },
   { start: '2026-12-23', end: '2027-01-08', name: 'Weihnachtsferien' },
   { start: '2027-02-01', end: '2027-02-02', name: 'Halbjahresferien' },
@@ -851,7 +848,7 @@ function getHolidayOrVacation(isoDate) {
 }
 
 /* ---------------------------------------------------------------------
-   Firebase Initialisierung
+   Firebase Initialisierung (Auth & Firestore)
 --------------------------------------------------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyAKxyP5jspdjKEyOLcRaLvoTffWUkR_148",
@@ -862,7 +859,7 @@ const firebaseConfig = {
   appId: "1:995117065431:web:8af45d1d71cc93735d3c92"
 };
 
-let auth = null, db = null, currentUser = null, unsubscribeDoc = null;
+let auth = null, db = null, currentUser = null, unsubscribeDoc = null, unsubscribeProofs = null;
 let isSyncingFromCloud = false;
 let localLastUpdated = 0;
 
@@ -875,6 +872,7 @@ try {
     auth.onAuthStateChanged((user) => {
       currentUser = user;
       if (unsubscribeDoc) { unsubscribeDoc(); unsubscribeDoc = null; }
+      if (unsubscribeProofs) { unsubscribeProofs(); unsubscribeProofs = null; }
 
       const authBtnLabel = document.getElementById('authBtnLabel');
       const authUserInfo = document.getElementById('authUserInfo');
@@ -888,6 +886,7 @@ try {
         authUserInfo.classList.remove('hidden');
         authUserEmail.textContent = user.email;
 
+        // 1. Hauptdokument (Stundenplan, Schülerdaten, StatusLog)
         const userRef = db.collection('users').doc(user.uid);
         unsubscribeDoc = userRef.onSnapshot((docSnap) => {
           if (docSnap.exists) {
@@ -896,6 +895,21 @@ try {
             pushAllToCloud();
           }
         }, err => console.warn("Firestore Lesefehler:", err));
+
+        // 2. Separate Proofs-Subcollection für geräteübergreifende Bild-Synchronisation
+        const proofsRef = userRef.collection('proofs');
+        unsubscribeProofs = proofsRef.onSnapshot((querySnap) => {
+          const cloudProofs = [];
+          querySnap.forEach(doc => {
+            cloudProofs.push(doc.data());
+          });
+          proofsArchive = cloudProofs;
+          localStorage.setItem(LS_PROOFS, JSON.stringify(proofsArchive));
+          cloudProofs.forEach(p => saveProofToDB(p).catch(() => {}));
+          renderUntisWeek();
+          renderReminders();
+        }, err => console.warn("Firestore Proofs Subcollection Fehler:", err));
+
       } else {
         authBtnLabel.textContent = '☁️ Anmelden (Sync)';
         document.getElementById('authBtn').style.color = 'var(--mute)';
@@ -915,7 +929,8 @@ function syncWithCloud() {
     const ts = Date.now();
     localLastUpdated = ts;
 
-    const lightProofs = proofsArchive.map(p => ({
+    // Metadaten für das Hauptdokument (ohne Bild, da Bilder in der Subcollection liegen)
+    const lightProofs = (proofsArchive || []).map(p => ({
       id: p.id,
       isoDate: p.isoDate,
       dateStr: p.dateStr,
@@ -964,11 +979,6 @@ function applyCloudData(data) {
 
     statusLog = data.statusLog || {};
     localStorage.setItem(LS_STATUS_LOG, JSON.stringify(statusLog));
-
-    if (data.proofsArchive) {
-      proofsArchive = data.proofsArchive;
-      localStorage.setItem(LS_PROOFS, JSON.stringify(proofsArchive));
-    }
 
     renderSubjects();
     renderUntisWeek();
@@ -1038,17 +1048,18 @@ function compressImage(file) {
       img.src = e.target.result;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height, max = 950;
+        let w = img.width, h = img.height, max = 900;
         if (w > max || h > max) {
           if (w > h) { h = Math.round((h * max) / w); w = max; }
           else { w = Math.round((w * max) / h); h = max; }
         }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.70));
+        resolve(canvas.toDataURL('image/jpeg', 0.65));
       };
+      img.onerror = () => reject(new Error("Bild konnte nicht geladen werden."));
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
   });
 }
 
@@ -1105,22 +1116,6 @@ let reminders = JSON.parse(localStorage.getItem(LS_REMINDERS) || 'null') || [];
 let statusLog = JSON.parse(localStorage.getItem(LS_STATUS_LOG) || 'null') || {};
 let proofsArchive = JSON.parse(localStorage.getItem(LS_PROOFS) || 'null') || [];
 let securityPin = localStorage.getItem(LS_SECURITY_PIN) || '1234';
-
-// Migration von Altbelegen in IndexedDB
-async function migrateLegacyProofs() {
-  let needsSave = false;
-  for (const p of proofsArchive) {
-    if (p.image) {
-      await saveProofToDB(p);
-      delete p.image;
-      needsSave = true;
-    }
-  }
-  if (needsSave) {
-    localStorage.setItem(LS_PROOFS, JSON.stringify(proofsArchive));
-  }
-}
-migrateLegacyProofs();
 
 function saveSchedule(s) { localStorage.setItem(LS_SCHEDULE, JSON.stringify(s)); syncWithCloud(); }
 function saveStudent(s) { localStorage.setItem(LS_STUDENT, JSON.stringify(s)); syncWithCloud(); }
@@ -1204,7 +1199,6 @@ function renderSubjects() {
   list.innerHTML = '';
   
   const targetDate = getTargetDateForWeekday(daySelect.value);
-  const targetIso = toIsoDate(targetDate);
   const targetWeekInfo = getWeekType(targetDate);
   
   const badgeEl = document.getElementById('meldDayInfoBadge');
@@ -1267,7 +1261,6 @@ stuKlasseInp.addEventListener('input', () => {
   saveStudent(student);
 });
 
-/* Eindeutige Grund-Ermittlung */
 function resolveReasonText(sickList, userExplicitReason = '') {
   if (userExplicitReason && userExplicitReason !== 'Verspätung / triftiger Grund' && !userExplicitReason.includes('triftiger Grund')) {
     return userExplicitReason;
@@ -1362,46 +1355,52 @@ function renderReminders() {
       </div>
     `;
     card.querySelector('.print-btn').addEventListener('click', () => openPrint(r));
+    
+    // Robuster Upload über Firestore Subcollection (kein Hängenbleiben mehr)
     card.querySelector('.proof-in').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      card.innerHTML = `<div style="text-align:center; font-size:0.75rem; color:var(--brand);">Speichere Nachweis sicher in Datenbank...</div>`;
+      card.innerHTML = `<div style="text-align:center; font-size:0.75rem; color:var(--brand);">Speichere Nachweis in Cloud...</div>`;
       
-      const base64 = await compressImage(file);
-      const proofRecord = { 
-        id: r.id, 
-        isoDate: r.isoDate, 
-        dateStr: r.dateStr, 
-        name: r.name, 
-        klasse: r.klasse, 
-        reason: computedReason,
-        ankunft: r.ankunft || '',
-        items: r.items, 
-        image: base64, 
-        timestamp: Date.now() 
-      };
+      try {
+        const base64 = await compressImage(file);
 
-      await saveProofToDB(proofRecord);
+        const proofRecord = { 
+          id: r.id, 
+          isoDate: r.isoDate, 
+          dateStr: r.dateStr, 
+          name: r.name || student.name || '', 
+          klasse: r.klasse || student.klasse || '', 
+          reason: computedReason,
+          ankunft: r.ankunft || '',
+          items: r.items || [], 
+          image: base64, 
+          timestamp: Date.now() 
+        };
 
-      proofsArchive = proofsArchive.filter(x => x.id !== r.id);
-      proofsArchive.push({
-        id: r.id,
-        isoDate: r.isoDate,
-        dateStr: r.dateStr,
-        name: r.name,
-        klasse: r.klasse,
-        reason: computedReason,
-        ankunft: r.ankunft || '',
-        items: r.items,
-        timestamp: proofRecord.timestamp
-      });
-      saveProofsArchive(proofsArchive);
+        // 1. Lokaler Offline-Cache
+        await saveProofToDB(proofRecord);
 
-      reminders = reminders.filter(x => x.id !== r.id);
-      saveReminders(reminders);
-      
-      renderReminders();
-      renderUntisWeek();
+        // 2. Direkt in Firestore Subcollection speichern (Sync auf alle Geräte!)
+        if (db && currentUser) {
+          await db.collection('users').doc(currentUser.uid).collection('proofs').doc(r.id).set(proofRecord);
+        }
+
+        // 3. Status bereinigen
+        proofsArchive = proofsArchive.filter(x => x.id !== r.id);
+        proofsArchive.push(proofRecord);
+        saveProofsArchive(proofsArchive);
+
+        reminders = reminders.filter(x => x.id !== r.id);
+        saveReminders(reminders);
+        
+        renderReminders();
+        renderUntisWeek();
+      } catch (err) {
+        console.error("Upload-Fehler:", err);
+        alert("Fehler beim Speichern des Nachweises: " + err.message);
+        renderReminders();
+      }
     });
     box.appendChild(card);
   });
@@ -1669,7 +1668,6 @@ function renderUntisWeek() {
     head.addEventListener('click', () => openDayModal(iso, day));
     col.appendChild(head);
 
-    // Nur Fächer anzeigen, die in dieser Woche (A oder B) aktiv sind!
     const daySubjects = (schedule[day] || []).filter(s => isSubjectInWeek(s, d));
 
     daySubjects.forEach(s => {
@@ -1795,7 +1793,6 @@ function openDayModal(iso, day) {
   const list = document.getElementById('dayModalSubjectList');
   list.innerHTML = '';
   
-  // Nur aktive Fächer für diese Woche
   const subjects = (schedule[day] || []).filter(s => isSubjectInWeek(s, iso));
 
   if (subjects.length === 0) {
@@ -1948,7 +1945,7 @@ Klasse ${student.klasse}`
   window.location.href = `mailto:${emails}?subject=${sub}&body=${body}`;
 });
 
-/* Archiv mit IndexedDB */
+/* Archiv mit Cloud- & IndexedDB-Kombination */
 let activeDetailProofId = null;
 
 document.getElementById('openArchiveBtn').addEventListener('click', async () => {
@@ -1962,19 +1959,28 @@ async function renderArchiveUI() {
   box.innerHTML = '<p style="text-align:center; padding:1.5rem; color:var(--mute); font-size:0.8rem;">Lade Nachweise...</p>';
 
   const dbProofs = await getAllProofsFromDB();
+  const dbMap = new Map((dbProofs || []).map(p => [p.id, p]));
 
-  if (!dbProofs || dbProofs.length === 0) { 
+  const allList = (proofsArchive || []).map(p => {
+    const local = dbMap.get(p.id);
+    return {
+      ...p,
+      image: p.image || (local ? local.image : '')
+    };
+  }).filter(p => p.image);
+
+  if (!allList || allList.length === 0) { 
     box.innerHTML = '<p style="text-align:center; padding:2rem; color:var(--mute); font-size:0.875rem;">Keine Belege vorhanden.</p>'; 
     return; 
   }
   box.className = 'archive-grid-4';
   box.innerHTML = '';
 
-  dbProofs.sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).forEach(p => {
+  allList.sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).forEach(p => {
     const card = document.createElement('div');
     card.className = 'archive-thumb-card';
     card.innerHTML = `
-      <img src="${p.image}" class="archive-thumb-img" alt="Nachweis">
+      <img src="${p.image}" class="archive-thumb-img" alt="Nachweis" loading="lazy">
       <div style="padding:0.4rem; font-size:0.75rem;">
         <strong style="display:block; color:var(--ink); font-size:0.75rem;">${escapeHtml(p.dateStr)}</strong>
         <span style="color:var(--mute); font-size:0.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">
@@ -2021,8 +2027,17 @@ document.getElementById('deleteProofDetailBtn').addEventListener('click', async 
   if (!activeDetailProofId) return;
   if (!confirm("Möchtest du diesen Beleg wirklich unwiderruflich löschen?")) return;
 
-  await deleteProofFromDB(activeDetailProofId);
+  // Aus Firestore Subcollection löschen
+  if (db && currentUser) {
+    try {
+      await db.collection('users').doc(currentUser.uid).collection('proofs').doc(activeDetailProofId).delete();
+    } catch (e) {
+      console.warn("Firestore Delete Fehler:", e);
+    }
+  }
 
+  // Aus lokalem IndexedDB und State entfernen
+  await deleteProofFromDB(activeDetailProofId);
   proofsArchive = proofsArchive.filter(x => x.id !== activeDetailProofId);
   saveProofsArchive(proofsArchive);
   
@@ -2308,9 +2323,21 @@ document.getElementById('resetAbsencesBtn').addEventListener('click', async () =
     saveReminders(reminders);
     saveProofsArchive(proofsArchive);
 
+    // Alle Dokumente in der Cloud-Subcollection löschen
+    if (db && currentUser) {
+      try {
+        const snap = await db.collection('users').doc(currentUser.uid).collection('proofs').get();
+        const batch = db.batch();
+        snap.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      } catch (err) {
+        console.warn("Firestore Batch Delete:", err);
+      }
+    }
+
     try {
-      const db = await openDB();
-      const tx = db.transaction(STORE_PROOFS, 'readwrite');
+      const dbInstance = await openDB();
+      const tx = dbInstance.transaction(STORE_PROOFS, 'readwrite');
       tx.objectStore(STORE_PROOFS).clear();
     } catch (err) {
       console.warn("IndexedDB Clear:", err);
